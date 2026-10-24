@@ -10,7 +10,7 @@ tar c -C "$SRC" \
   --exclude='node_modules' \
   --exclude='dist' \
   --exclude='*.tsbuildinfo' \
-  --exclude='data' \
+  --exclude='./data' \
   --exclude='*.sqlite*' \
   --exclude='.DS_Store' \
   . | tar x -C "$DEST"
