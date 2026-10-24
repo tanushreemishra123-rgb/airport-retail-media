@@ -36,13 +36,10 @@ ENV NODE_ENV=production \
 RUN useradd -r -u 10001 arm && mkdir -p /data && chown arm:arm /data
 VOLUME /data
 
-COPY --from=build /app/node_modules ./node_modules
-COPY --from=build /app/packages ./packages
-COPY --from=build /app/apps/api/dist ./apps/api/dist
-COPY --from=build /app/apps/api/package.json ./apps/api/package.json
-COPY --from=build /app/apps/web/dist ./apps/web/dist
-COPY --from=build /app/aodb-samples ./aodb-samples
-COPY --from=build /app/package.json ./package.json
+# Copy the whole built app so nested workspace deps (drizzle-orm) ship.
+COPY --from=build /app ./
+RUN chown -R arm:arm /app
+
 
 USER arm
 EXPOSE 8080
