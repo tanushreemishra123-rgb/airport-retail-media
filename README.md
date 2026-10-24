@@ -11,6 +11,8 @@ fictional two-terminal hub **Meridian International (MQI)**.
 
 ---
 
+   **Live playground:** https://airport-retail-media.onrender.com
+
 ## Quick start (one command, offline)
 
 ```bash
