@@ -1,0 +1,38 @@
+# Render Blueprint — one public URL, Docker-native, WebSocket support, free tier.
+# Deploy: push this repo to GitHub, then in Render choose "New > Blueprint" and
+# point it at the repo. No API keys, no manual setup; the service seeds demo
+# data on first boot. A persistent disk keeps the SQLite file across restarts.
+services:
+  - type: web
+    name: skyreach-arm
+    runtime: docker
+    plan: free
+    dockerfilePath: ./Dockerfile
+    healthCheckPath: /api/health
+    envVars:
+      - key: PORT
+        value: "8080"
+      - key: DB_PATH
+        value: /data/arm.sqlite
+      - key: FLIGHT_SOURCE
+        value: mock-aidx
+      - key: QUEUE_SOURCE
+        value: mock-acris
+      - key: CREATIVE_PROVIDER
+        value: mock-template
+      - key: BRAND_NAME
+        value: SkyReach
+      - key: SECOND_LANGUAGE
+        value: ar
+      - key: CURRENCY
+        value: USD
+      # Render provides the public URL at runtime; the app reads it for QR links.
+      - key: PUBLIC_BASE_URL
+        fromService:
+          type: web
+          name: skyreach-arm
+          property: host
+    disk:
+      name: arm-data
+      mountPath: /data
+      sizeGB: 1

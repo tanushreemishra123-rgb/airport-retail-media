@@ -1,0 +1,28 @@
+# One command brings up the whole platform on localhost, offline, seeded.
+#   docker compose up
+# Then open http://localhost:8080
+services:
+  app:
+    build: .
+    image: arm-platform:latest
+    ports:
+      - "8080:8080"
+    environment:
+      PORT: "8080"
+      DB_PATH: /data/arm.sqlite
+      # Adapter selection (mock by default; swap to go live).
+      FLIGHT_SOURCE: mock-aidx
+      QUEUE_SOURCE: mock-acris
+      CREATIVE_PROVIDER: mock-template
+      # White-label + i18n.
+      BRAND_NAME: SkyReach
+      SECOND_LANGUAGE: ar
+      CURRENCY: USD
+      # QR claim page LAN address (set to your laptop's LAN IP for phone scans).
+      PUBLIC_BASE_URL: ""
+    volumes:
+      - arm-data:/data
+    restart: unless-stopped
+
+volumes:
+  arm-data:

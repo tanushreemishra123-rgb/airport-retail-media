@@ -1,0 +1,102 @@
+openapi: 3.0.3
+info:
+  title: SkyReach Airport Retail Media API
+  version: 1.0.0
+  description: >
+    REST API for the airport retail media platform. A WebSocket at /ws streams
+    live {type: clock|delta|event|redeem} messages. All responses are derived
+    from measured data (flights, presence, decisions, impressions).
+servers:
+  - url: /api
+tags:
+  - name: sim
+  - name: admin
+  - name: campaigns
+  - name: retailer
+  - name: media
+  - name: airline
+  - name: passenger
+paths:
+  /health: { get: { summary: Health, responses: { "200": { description: ok } } } }
+  /config: { get: { summary: White-label + i18n config, responses: { "200": { description: ok } } } }
+  /sim:
+    get: { tags: [sim], summary: Clock state, responses: { "200": { description: "{now,speed,running}" } } }
+  /sim/play: { post: { tags: [sim], summary: Play, responses: { "200": { description: ok } } } }
+  /sim/pause: { post: { tags: [sim], summary: Pause, responses: { "200": { description: ok } } } }
+  /sim/speed:
+    post:
+      tags: [sim]
+      summary: Set speed (1|10|60)
+      requestBody: { content: { application/json: { schema: { type: object, properties: { speed: { type: number } } } } } }
+      responses: { "200": { description: ok } }
+  /sim/jump:
+    post:
+      tags: [sim]
+      summary: Jump simulation time
+      requestBody: { content: { application/json: { schema: { type: object, properties: { iso: { type: string } } } } } }
+      responses: { "200": { description: ok } }
+  /sim/inject:
+    post:
+      tags: [sim]
+      summary: Inject a live event (delay | gate_change | screen_offline | feed_lag)
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                type: { type: string, enum: [delay, gate_change, screen_offline, feed_lag] }
+                flightId: { type: string }
+                minutes: { type: number }
+                gate: { type: string }
+                zoneId: { type: string }
+                screenId: { type: string }
+                source: { type: string }
+                offline: { type: boolean }
+                lag: { type: boolean }
+      responses: { "200": { description: "{ok}" } }
+  /sim/targets: { get: { tags: [sim], summary: Injectable flights/screens/feeds, responses: { "200": { description: ok } } } }
+
+  /admin/kpis: { get: { tags: [admin], summary: Live KPI strip, responses: { "200": { description: ok } } } }
+  /admin/feeds: { get: { tags: [admin], summary: Feed health, responses: { "200": { description: ok } } } }
+  /admin/network: { get: { tags: [admin], summary: Zones + screens + presence for the map, responses: { "200": { description: ok } } } }
+  /admin/incidents: { get: { tags: [admin], summary: Incident tracker, responses: { "200": { description: ok } } } }
+  /admin/incidents/{id}: { post: { tags: [admin], summary: Update incident status/owner, parameters: [{ name: id, in: path, required: true, schema: { type: string } }], responses: { "200": { description: ok } } } }
+  /admin/master: { get: { tags: [admin], summary: Master data lists, responses: { "200": { description: ok } } } }
+  /decisions: { get: { tags: [admin], summary: Decision log (filter by screenId/campaignId/engine), responses: { "200": { description: ok } } } }
+  /decisions/{id}: { get: { tags: [admin], summary: One decision with full evidence trail, parameters: [{ name: id, in: path, required: true, schema: { type: string } }], responses: { "200": { description: ok } } } }
+
+  /campaigns:
+    get: { tags: [campaigns], summary: List campaigns (with live impressions/redemptions/history), responses: { "200": { description: ok } } }
+    post: { tags: [campaigns], summary: Create a campaign, responses: { "200": { description: ok } } }
+  /campaigns/{id}: { get: { tags: [campaigns], summary: One campaign, parameters: [{ name: id, in: path, required: true, schema: { type: string } }], responses: { "200": { description: ok } } } }
+  /campaigns/{id}/duplicate: { post: { tags: [campaigns], summary: Duplicate ("run again"), parameters: [{ name: id, in: path, required: true, schema: { type: string } }], responses: { "200": { description: ok } } } }
+  /campaigns/{id}/status: { post: { tags: [campaigns], summary: Set status, parameters: [{ name: id, in: path, required: true, schema: { type: string } }], responses: { "200": { description: ok } } } }
+  /campaigns/preview: { post: { tags: [campaigns], summary: Live audience-match preview, responses: { "200": { description: "{matchPct,paxNow,expectedImpressions,...}" } } } }
+  /creatives: { get: { tags: [campaigns], summary: Creative library, responses: { "200": { description: ok } } } }
+  /creative/generate: { post: { tags: [campaigns], summary: GenAI creative from a brief (EN + second language), responses: { "200": { description: ok } } } }
+
+  /retailer/outlets: { get: { tags: [retailer], summary: Sample outlets, responses: { "200": { description: ok } } } }
+  /retailer/{outletId}/dashboard: { get: { tags: [retailer], summary: Outlet KPIs + flow + campaigns, parameters: [{ name: outletId, in: path, required: true, schema: { type: string } }], responses: { "200": { description: ok } } } }
+  /retailer/{outletId}/flow: { get: { tags: [retailer], summary: Passenger flow near the store, parameters: [{ name: outletId, in: path, required: true, schema: { type: string } }], responses: { "200": { description: ok } } } }
+
+  /media/inventory: { get: { tags: [media], summary: Inventory calendar (zone x hour), responses: { "200": { description: ok } } } }
+  /media/yield: { get: { tags: [media], summary: Yield, pricing, 7-day forecast, responses: { "200": { description: ok } } } }
+  /media/approvals: { get: { tags: [media], summary: Approval queue, responses: { "200": { description: ok } } } }
+  /media/approvals/campaign/{id}: { post: { tags: [media], summary: Approve/reject campaign, parameters: [{ name: id, in: path, required: true, schema: { type: string } }], responses: { "200": { description: ok } } } }
+  /media/advertisers: { get: { tags: [media], summary: Advertiser overview, responses: { "200": { description: ok } } } }
+  /media/heatmap: { get: { tags: [media], summary: Segment x hour x zone heatmap, responses: { "200": { description: ok } } } }
+
+  /airline/list: { get: { tags: [airline], summary: Airlines, responses: { "200": { description: ok } } } }
+  /airline/{code}/flights: { get: { tags: [airline], summary: Flights today, parameters: [{ name: code, in: path, required: true, schema: { type: string } }], responses: { "200": { description: ok } } } }
+  /airline/{code}/profile: { get: { tags: [airline], summary: Aggregated crowd profile, parameters: [{ name: code, in: path, required: true, schema: { type: string } }], responses: { "200": { description: ok } } } }
+
+  /zones: { get: { tags: [passenger], summary: Zones, responses: { "200": { description: ok } } } }
+  /screens: { get: { tags: [passenger], summary: Screens (optional ?zoneId), responses: { "200": { description: ok } } } }
+  /screen/{id}/playing: { get: { tags: [passenger], summary: Current decision + creative + nearby flights + promo, parameters: [{ name: id, in: path, required: true, schema: { type: string } }], responses: { "200": { description: ok } } } }
+  /qr: { get: { tags: [passenger], summary: QR PNG for a promo code (?code=), responses: { "200": { description: image/png } } } }
+  /claim/{code}:
+    get: { tags: [passenger], summary: Claim-page offer info, parameters: [{ name: code, in: path, required: true, schema: { type: string } }], responses: { "200": { description: ok } } }
+    post: { tags: [passenger], summary: Redeem a code, parameters: [{ name: code, in: path, required: true, schema: { type: string } }], responses: { "200": { description: ok } } }
+  /claim/{code}/share: { post: { tags: [passenger], summary: Issue a share-to-family code, parameters: [{ name: code, in: path, required: true, schema: { type: string } }], responses: { "200": { description: ok } } } }
+  /recommend/slots: { get: { tags: [media], summary: Best 3 slots tomorrow for a campaign (?campaignId=), responses: { "200": { description: ok } } } }

@@ -1,0 +1,27 @@
+{
+  "name": "airport-retail-media",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Airport retail media platform POC — ads and promotions on airport screens, triggered by live flight and passenger-flow data.",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "npm run build -w @arm/core && npm run build -w @arm/web && npm run build -w @arm/api",
+    "dev": "concurrently -n api,web -c cyan,magenta \"npm:dev:api\" \"npm:dev:web\"",
+    "dev:api": "npm run dev -w @arm/api",
+    "dev:web": "npm run dev -w @arm/web",
+    "seed": "npm run seed -w @arm/api",
+    "start": "node apps/api/dist/server.js",
+    "test": "npm run test -w @arm/core && npm run test -w @arm/api",
+    "typecheck": "tsc -b --pretty"
+  },
+  "devDependencies": {
+    "concurrently": "9.1.0",
+    "typescript": "5.7.2"
+  }
+}
