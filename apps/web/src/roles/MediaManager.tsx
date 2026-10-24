@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from "react";
-import { api, type Inventory, type YieldForecast, type Approvals, type AdvertiserRow, type Heatmap } from "../api";
+import { api, type Inventory, type YieldForecast, type Approvals, type AdvertiserRow, type Heatmap, type InventoryPackage, type Campaign, type Slot, type Zone } from "../api";
 import { useStore } from "../store";
 import { Card, Badge, fmt, money, useLiveTick } from "../ui";
 
@@ -17,7 +17,67 @@ export function MediaManager() {
         <Advertisers />
         <HeatmapPanel />
       </div>
+      <div className="grid cols-2">
+        <PackageBuilder />
+        <SlotRecommender />
+      </div>
     </>
+  );
+}
+
+function PackageBuilder() {
+  const cur = useStore((s) => s.config?.currency ?? "USD");
+  const [zones, setZones] = useState<Zone[]>([]);
+  const [packages, setPackages] = useState<InventoryPackage[]>([]);
+  const [name, setName] = useState("International Departures Premium Pack");
+  const [sel, setSel] = useState<string[]>(["T2-C", "T2-D", "T2-DF"]);
+  const [price, setPrice] = useState(15000);
+  const refresh = () => api.packages().then(setPackages);
+  useEffect(() => { api.zones().then((z) => setZones(z.filter((x) => x.gates.length || x.id.endsWith("DF") || x.id.endsWith("RET")))); refresh(); }, []);
+  const create = async () => { await api.createPackage(name, sel, price * 100); refresh(); };
+  return (
+    <Card title="Package builder" hint="Bundle screens/zones into a sellable pack with predicted reach.">
+      <input value={name} onChange={(e) => setName(e.target.value)} style={{ width: "100%", marginBottom: 8 }} />
+      <div className="row" style={{ marginBottom: 8, gap: 4 }}>
+        {zones.map((z) => <button key={z.id} className={`btn sm ${sel.includes(z.id) ? "active" : ""}`} onClick={() => setSel((s) => s.includes(z.id) ? s.filter((x) => x !== z.id) : [...s, z.id])}>{z.id}</button>)}
+      </div>
+      <div className="row" style={{ marginBottom: 10 }}>
+        <label className="row" style={{ gap: 4 }}>Price $<input type="number" value={price} onChange={(e) => setPrice(Number(e.target.value))} style={{ width: 90 }} /></label>
+        <button className="btn sm primary" onClick={create}>Create package</button>
+      </div>
+      <div className="scroll" style={{ maxHeight: 180 }}>
+        <table><thead><tr><th>Package</th><th>Screens</th><th>Pred. impr/day</th><th>Price</th></tr></thead>
+          <tbody>{packages.map((p) => <tr key={p.id}><td>{p.name}</td><td>{p.screenCount}</td><td>{fmt(p.predictedDailyImpressions)}</td><td>{money(p.priceCents, cur)}</td></tr>)}</tbody>
+        </table>
+      </div>
+    </Card>
+  );
+}
+
+function SlotRecommender() {
+  const [campaigns, setCampaigns] = useState<Campaign[]>([]);
+  const [cid, setCid] = useState("");
+  const [slots, setSlots] = useState<Slot[]>([]);
+  useEffect(() => { api.campaigns().then((c) => { setCampaigns(c); setCid(c[0]?.id ?? ""); }); }, []);
+  useEffect(() => { if (cid) api.recommend(cid).then(setSlots); }, [cid]);
+  return (
+    <Card title="Smart recommendation — best 3 slots tomorrow" hint="Predicted impressions × audience match for the selected campaign.">
+      <select value={cid} onChange={(e) => setCid(e.target.value)} style={{ width: "100%", marginBottom: 10 }}>
+        {campaigns.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+      </select>
+      {slots.length === 0 ? <div className="muted">No qualifying slots.</div> : (
+        <div className="grid cols-3">
+          {slots.map((s, i) => (
+            <div key={i} className="card" style={{ background: "var(--panel-2)" }}>
+              <div className="v mono" style={{ fontSize: 22, fontWeight: 800 }}>{String(s.hour).padStart(2, "0")}:00</div>
+              <div className="muted" style={{ fontSize: 12 }}>{s.zoneId}</div>
+              <div style={{ marginTop: 6 }}><Badge tone="ok">{s.score}% match</Badge></div>
+              <div className="muted" style={{ fontSize: 12, marginTop: 4 }}>~{fmt(s.predictedImpressions)} impr</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
   );
 }
 
@@ -109,10 +169,10 @@ function Advertisers() {
     <Card title="Advertiser overview" hint="Top advertisers by spend; under-delivering flagged.">
       <div className="scroll" style={{ maxHeight: 360 }}>
         <table>
-          <thead><tr><th>Advertiser</th><th>Spend</th><th>Running</th></tr></thead>
+          <thead><tr><th>Advertiser</th><th>Spend</th><th>Running</th><th>Report</th></tr></thead>
           <tbody>
             {rows.slice(0, 15).map((r) => (
-              <tr key={r.id}><td>{r.name}{r.underdelivering > 0 && <Badge tone="warn"> under-delivering</Badge>}</td><td>{money(r.spentCents, cur)}</td><td>{r.running}/{r.campaigns}</td></tr>
+              <tr key={r.id}><td>{r.name}{r.underdelivering > 0 && <Badge tone="warn"> under-delivering</Badge>}</td><td>{money(r.spentCents, cur)}</td><td>{r.running}/{r.campaigns}</td><td><a className="btn sm" href={api.reportUrl(r.id)} target="_blank" rel="noreferrer">PDF</a></td></tr>
             ))}
           </tbody>
         </table>

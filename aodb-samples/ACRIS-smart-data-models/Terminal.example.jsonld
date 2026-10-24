@@ -1,0 +1,12 @@
+{
+  "id": "urn:ngsi-ld:Terminal:MQI:T2",
+  "type": "Terminal",
+  "@context": [
+    "https://smartdatamodels.org/context.jsonld",
+    "https://raw.githubusercontent.com/smart-data-models/dataModel.ACRIS/master/context.jsonld"
+  ],
+  "name": { "type": "Property", "value": "Terminal 2 (International)" },
+  "refAirport": { "type": "Relationship", "object": "urn:ngsi-ld:Airport:MQI" },
+  "concourses": { "type": "Property", "value": ["C", "D"] },
+  "dateModified": { "type": "Property", "value": { "@type": "DateTime", "@value": "2026-10-14T06:00:00Z" } }
+}

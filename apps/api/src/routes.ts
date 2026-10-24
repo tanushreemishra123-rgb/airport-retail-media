@@ -16,6 +16,7 @@ import { AIRLINES } from "./data/reference.js";
 export interface AppConfig {
   brandName: string;
   brandColor: string;
+  brandLogo: string;
   secondLanguage: string;
   currency: string;
   publicBaseUrl: string;
@@ -110,21 +111,20 @@ export function registerRoutes(app: FastifyInstance, deps: Deps): void {
     terminals: engine.terminals, zones: engine.zones,
     screens: [...engine.screens.values()],
   }));
+  // Create OR edit master data (screens, outlets) — the MDM forms post here.
   app.post<{ Body: { entity: string; data: Record<string, unknown> } }>("/api/admin/master", async (req) => {
-    // Lightweight create for the MDM demo (screens/outlets kept in memory).
     const { entity, data } = req.body ?? ({} as { entity: string; data: Record<string, unknown> });
     if (entity === "screen") {
-      const id = `SCR-${String(engine.screens.size + 1).padStart(4, "0")}`;
-      engine.screens.set(id, {
-        id, name: String(data.name ?? id), zoneId: String(data.zoneId ?? engine.zones[0]!.id),
-        nearestGates: (data.nearestGates as string[]) ?? [], sizeInches: Number(data.sizeInches ?? 55),
-        orientation: (data.orientation as "portrait" | "landscape") ?? "landscape",
-        status: "online", lastSeen: nowIso(), latencyMs: 40,
-      });
-      return { ok: true, id };
+      const s = engine.upsertScreen(data as never);
+      return { ok: true, id: s.id, screen: s };
+    }
+    if (entity === "outlet") {
+      const o = engine.upsertOutlet(data as never);
+      return { ok: true, id: o.id, outlet: o };
     }
     return { ok: false, error: "unsupported_entity" };
   });
+  app.get("/api/admin/performance", async () => engine.performance());
 
   // ---- decision log (audit) ----
   app.get<{ Querystring: { screenId?: string; campaignId?: string; engine?: string; limit?: string } }>("/api/decisions", async (req) => {
@@ -181,6 +181,29 @@ export function registerRoutes(app: FastifyInstance, deps: Deps): void {
     if (!c) return { error: "not_found" };
     c.status = req.body.status;
     return { ok: true };
+  });
+  // Stock-aware offers: pause/resume when an item is out of/in stock.
+  app.post<{ Params: { id: string }; Body: { available: boolean } }>("/api/campaigns/:id/stock", async (req) => {
+    return { ok: engine.setStock(req.params.id, req.body.available) };
+  });
+  // A/B: attach a second creative variant + traffic split.
+  app.post<{ Params: { id: string }; Body: { variantCreativeId: string; abSplit: number } }>("/api/campaigns/:id/ab", async (req) => {
+    const c = engine.campaigns.get(req.params.id);
+    if (!c) return { error: "not_found" };
+    c.variantCreativeId = req.body.variantCreativeId;
+    c.abSplit = Math.max(0, Math.min(1, req.body.abSplit));
+    return { ok: true };
+  });
+  app.get<{ Params: { id: string } }>("/api/campaigns/:id/ab", async (req) => {
+    const c = engine.campaigns.get(req.params.id);
+    if (!c) return { error: "not_found" };
+    const a = c.creativeIds[0] ?? "";
+    const b = c.variantCreativeId ?? "";
+    return {
+      split: c.abSplit ?? 0,
+      variantA: { creativeId: a, impressions: engine.perCreativeImpr.get(a) ?? 0 },
+      variantB: b ? { creativeId: b, impressions: engine.perCreativeImpr.get(b) ?? 0 } : null,
+    };
   });
 
   // Live audience-match preview while building a campaign.
@@ -288,6 +311,31 @@ export function registerRoutes(app: FastifyInstance, deps: Deps): void {
   });
   app.get("/api/media/heatmap", async () => segmentHeatmap(engine));
 
+  // Package builder: bundle zones/screens into a sellable pack.
+  app.get("/api/media/packages", async () => [...engine.packages.values()]);
+  app.post<{ Body: { name: string; zoneIds: string[]; priceCents: number } }>("/api/media/packages", async (req) => {
+    const b = req.body;
+    return { ok: true, package: engine.createPackage(b.name, b.zoneIds ?? [], b.priceCents ?? 500000) };
+  });
+
+  // One-click advertiser report — a shareable printable HTML page (print → PDF).
+  app.get<{ Params: { id: string } }>("/api/media/report/:id", async (req, reply) => {
+    const adv = engine.advertisers.find((a) => a.id === req.params.id);
+    if (!adv) { reply.code(404).send("not found"); return; }
+    const cs = [...engine.campaigns.values()].filter((c) => c.advertiserId === adv.id);
+    const impr = cs.reduce((s, c) => s + (engine.perCampaignImpr.get(c.id) ?? 0), 0);
+    const red = cs.reduce((s, c) => s + (engine.perCampaignRedemptions.get(c.id) ?? 0), 0);
+    const spend = cs.reduce((s, c) => s + c.budget.spentCents, 0);
+    const fmtc = (c: number) => `${config.currency} ${(c / 100).toLocaleString()}`;
+    const rows = cs.map((c) => `<tr><td>${c.name}</td><td>${c.status}</td><td style="text-align:right">${(engine.perCampaignImpr.get(c.id) ?? 0).toLocaleString()}</td><td style="text-align:right">${engine.perCampaignRedemptions.get(c.id) ?? 0}</td><td style="text-align:right">${fmtc(c.budget.spentCents)}</td></tr>`).join("");
+    reply.header("Content-Type", "text/html").send(`<!doctype html><html><head><meta charset="utf-8"><title>${adv.name} — advertiser report</title>
+<style>body{font-family:system-ui,Arial;margin:40px;color:#16203a}h1{margin:0}table{width:100%;border-collapse:collapse;margin-top:16px}th,td{padding:8px;border-bottom:1px solid #e3e8f2;font-size:13px;text-align:left}.kpis{display:flex;gap:24px;margin:20px 0}.k .v{font-size:26px;font-weight:800}.k .l{color:#697792;font-size:12px}button{margin-top:20px;padding:8px 14px}@media print{button{display:none}}</style></head>
+<body><h1>${config.brandName} — Advertiser report</h1><div style="color:#697792">${adv.name} · ${config.airport} · generated ${nowIso()}</div>
+<div class="kpis"><div class="k"><div class="v">${impr.toLocaleString()}</div><div class="l">Impressions</div></div><div class="k"><div class="v">${red}</div><div class="l">Redemptions</div></div><div class="k"><div class="v">${fmtc(spend)}</div><div class="l">Spend</div></div><div class="k"><div class="v">${cs.length}</div><div class="l">Campaigns</div></div></div>
+<table><thead><tr><th>Campaign</th><th>Status</th><th style="text-align:right">Impr</th><th style="text-align:right">Redeem</th><th style="text-align:right">Spend</th></tr></thead><tbody>${rows}</tbody></table>
+<button onclick="window.print()">Print / Save as PDF</button></body></html>`);
+  });
+
   // ---- airline ----
   app.get("/api/airline/list", async () => AIRLINES);
   app.get<{ Params: { code: string } }>("/api/airline/:code/flights", async (req) => {
@@ -307,6 +355,34 @@ export function registerRoutes(app: FastifyInstance, deps: Deps): void {
     const contrib: ProfileContribution[] = flights.map((f) => ({ profile: f.profile, weight: f.paxCount, pax: f.paxCount }));
     return contrib.length ? rollupProfile(contrib) : {};
   });
+  // Gate-area messaging: schedule sponsored content on this airline's gate zones.
+  app.post<{ Params: { code: string }; Body: { zoneIds: string[]; headline: string; body: string } }>("/api/airline/:code/schedule", async (req) => {
+    const b = req.body;
+    const zoneIds = b.zoneIds?.length ? b.zoneIds : ["T2-C", "T2-D"];
+    const c = engine.scheduleGateMessage(req.params.code, zoneIds, b.headline || "Welcome aboard", b.body || "Priority boarding and lounge offers.");
+    return { ok: true, campaignId: c.id };
+  });
+  // Own-passenger performance (campaigns playing at this airline's gate zones).
+  app.get<{ Params: { code: string } }>("/api/airline/:code/performance", async (req) => {
+    const adv = engine.advertisers.find((a) => a.type === "airline" && a.airlineCode === req.params.code);
+    const cs = [...engine.campaigns.values()].filter((c) => c.advertiserId === adv?.id);
+    return {
+      impressions: cs.reduce((s, c) => s + (engine.perCampaignImpr.get(c.id) ?? 0), 0),
+      redemptions: cs.reduce((s, c) => s + (engine.perCampaignRedemptions.get(c.id) ?? 0), 0),
+      campaigns: cs.length,
+    };
+  });
+  // Co-marketing marketplace.
+  app.get<{ Querystring: { airlineCode?: string } }>("/api/offers", async (req) => {
+    let list = engine.offers;
+    if (req.query.airlineCode) list = list.filter((o) => o.airlineCode === req.query.airlineCode);
+    return list;
+  });
+  app.post<{ Body: { retailerAdvertiserId: string; airlineCode: string; description: string } }>("/api/offers", async (req) => {
+    const b = req.body;
+    return { ok: true, offer: engine.createOffer(b.retailerAdvertiserId, b.airlineCode, b.description) };
+  });
+  app.post<{ Params: { id: string } }>("/api/offers/:id/accept", async (req) => ({ ok: engine.acceptOffer(req.params.id) }));
 
   // ---- passenger screen ----
   app.get("/api/zones", async () => engine.zones);

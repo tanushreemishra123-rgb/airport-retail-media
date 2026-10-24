@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
-import { api, type Network, type Incident, type Feed, type Decision, type Master } from "../api";
+import { api, type Network, type Incident, type Feed, type Decision, type Master, type Performance as Perf } from "../api";
 import { useStore } from "../store";
-import { Card, Kpi, Badge, fmt, money, useLiveTick } from "../ui";
+import { Card, Kpi, Badge, fmt, money, Sparkline, useLiveTick } from "../ui";
 
 export function Admin() {
   const kpis = useStore((s) => s.kpis);
@@ -28,11 +28,36 @@ export function Admin() {
           <Feeds />
         </div>
       </div>
-      <div className="grid cols-2">
+      <div className="grid cols-2" style={{ marginBottom: 14 }}>
         <DecisionLog />
         <MasterData />
       </div>
+      <Performance />
     </>
+  );
+}
+
+function Performance() {
+  const tick = useLiveTick();
+  const [p, setP] = useState<Perf | null>(null);
+  useEffect(() => { api.performance().then(setP); }, [tick === 0 ? 0 : Math.floor(tick / 4)]);
+  if (!p) return null;
+  return (
+    <Card title="Performance" hint="API latency percentiles, playlist build time, and 7-day uptime.">
+      <div className="grid cols-4">
+        <Kpi label="API p50" value={`${p.apiP50Ms} ms`} />
+        <Kpi label="API p95" value={`${p.apiP95Ms} ms`} tone={p.apiP95Ms > 150 ? "warn" : "ok"} />
+        <Kpi label="API p99" value={`${p.apiP99Ms} ms`} />
+        <Kpi label="Playlist build" value={`${p.playlistBuildMs} ms`} tone={p.playlistBuildMs > 500 ? "warn" : "ok"} />
+      </div>
+      <div className="row" style={{ marginTop: 12, alignItems: "flex-end" }}>
+        <div style={{ flex: 1 }}>
+          <div className="muted" style={{ fontSize: 12 }}>Uptime last 7 days (%)</div>
+          <Sparkline points={p.uptime7d.map((u) => u.pct)} color="var(--ok)" />
+        </div>
+        <div className="muted mono" style={{ fontSize: 12 }}>avg {(p.uptime7d.reduce((s, u) => s + u.pct, 0) / p.uptime7d.length).toFixed(2)}%</div>
+      </div>
+    </Card>
   );
 }
 
@@ -158,14 +183,32 @@ function DecisionLog() {
 function MasterData() {
   const [m, setM] = useState<Master | null>(null);
   const [tab, setTab] = useState<"advertisers" | "outlets" | "airlines" | "screens" | "zones">("advertisers");
-  useEffect(() => { api.master().then(setM); }, []);
+  const [form, setForm] = useState<{ name: string; zoneId: string }>({ name: "", zoneId: "" });
+  const refresh = () => api.master().then(setM);
+  useEffect(() => { refresh(); }, []);
   if (!m) return <Card title="Master data"><div className="muted">Loading…</div></Card>;
   const tabs = ["advertisers", "outlets", "airlines", "screens", "zones"] as const;
+  const creatable = tab === "screens" || tab === "outlets";
+  const create = async () => {
+    const entity = tab === "screens" ? "screen" : "outlet";
+    await api.createMaster(entity, { name: form.name || `New ${entity}`, zoneId: form.zoneId || m.zones[0]!.id });
+    setForm({ name: "", zoneId: "" });
+    refresh();
+  };
   return (
-    <Card title="Master data management" hint="Vendors, outlets, airlines, locations and screens.">
+    <Card title="Master data management" hint="Vendors, outlets, airlines, locations and screens — list + create/edit.">
       <div className="row" style={{ marginBottom: 8 }}>
         {tabs.map((t) => <button key={t} className={`btn sm ${tab === t ? "active" : ""}`} onClick={() => setTab(t)}>{t} ({(m[t] as unknown[]).length})</button>)}
       </div>
+      {creatable && (
+        <div className="row" style={{ marginBottom: 10 }}>
+          <input placeholder={`New ${tab.slice(0, -1)} name`} value={form.name} onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))} style={{ flex: 1 }} />
+          <select value={form.zoneId} onChange={(e) => setForm((f) => ({ ...f, zoneId: e.target.value }))}>
+            <option value="">zone…</option>{m.zones.map((z) => <option key={z.id} value={z.id}>{z.id}</option>)}
+          </select>
+          <button className="btn sm primary" onClick={create}>+ Add</button>
+        </div>
+      )}
       <div className="scroll" style={{ maxHeight: 320 }}>
         <table>
           <tbody>

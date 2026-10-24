@@ -1,0 +1,14 @@
+{
+  "id": "urn:ngsi-ld:QueueMeasurement:MQI:T2-C-SEC:20261014T1410Z",
+  "type": "QueueingProcessMeasurement",
+  "@context": [
+    "https://smartdatamodels.org/context.jsonld",
+    "https://raw.githubusercontent.com/smart-data-models/dataModel.ACRIS/master/context.jsonld"
+  ],
+  "refProcess": { "type": "Relationship", "object": "urn:ngsi-ld:PassengerProcess:MQI:T2-C-SEC" },
+  "refZone": { "type": "Relationship", "object": "urn:ngsi-ld:AirportZone:MQI:T2-C" },
+  "dateObserved": { "type": "Property", "value": { "@type": "DateTime", "@value": "2026-10-14T14:10:00Z" } },
+  "queueLength": { "type": "Property", "value": 134, "unitCode": "C62" },
+  "averageWaitingTime": { "type": "Property", "value": 7.4, "unitCode": "MIN" },
+  "throughput": { "type": "Property", "value": 18, "unitCode": "E37" }
+}

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { api, type Airline as AirlineT, type AirlineFlight, type CrowdProfile } from "../api";
-import { Card, Badge, SharesBars, fmt, useLiveTick } from "../ui";
+import { api, type Airline as AirlineT, type AirlineFlight, type CrowdProfile, type Offer, type Advertiser } from "../api";
+import { Card, Badge, SharesBars, Kpi, fmt, useLiveTick } from "../ui";
 
 export function Airline() {
   const [airlines, setAirlines] = useState<AirlineT[]>([]);
@@ -75,6 +75,76 @@ function Body({ code, airline }: { code: string; airline?: AirlineT }) {
           </div>
         </Card>
       </div>
+      <div className="grid cols-3">
+        <GateSchedule code={code} />
+        <CoMarketing code={code} />
+        <OwnPerformance code={code} />
+      </div>
     </>
+  );
+}
+
+function GateSchedule({ code }: { code: string }) {
+  const [headline, setHeadline] = useState("Upgrade to Business from $89");
+  const [body, setBody] = useState("Lie-flat comfort and priority boarding.");
+  const [zoneIds] = useState<string[]>(["T2-C", "T2-D"]);
+  const [done, setDone] = useState<string | null>(null);
+  const schedule = async () => { const r = await api.scheduleGate(code, zoneIds, headline, body); setDone(r.campaignId); };
+  return (
+    <Card title="Gate-area messaging" hint="Schedule sponsored content on your gate screens for the boarding window.">
+      <input value={headline} onChange={(e) => setHeadline(e.target.value)} style={{ width: "100%", marginBottom: 6 }} />
+      <input value={body} onChange={(e) => setBody(e.target.value)} style={{ width: "100%", marginBottom: 8 }} />
+      <div className="muted" style={{ fontSize: 12, marginBottom: 8 }}>Zones: {zoneIds.join(", ")} · airline priority ×1.5 during boarding</div>
+      <button className="btn primary" onClick={schedule}>Schedule to my gates</button>
+      {done && <Badge tone="ok" >Scheduled {done}</Badge>}
+    </Card>
+  );
+}
+
+function CoMarketing({ code }: { code: string }) {
+  const [offers, setOffers] = useState<Offer[]>([]);
+  const [retailers, setRetailers] = useState<Advertiser[]>([]);
+  const [sel, setSel] = useState("");
+  const [desc, setDesc] = useState("10% off for your passengers");
+  const refresh = () => api.offers(code).then(setOffers);
+  useEffect(() => {
+    api.master().then((m) => { const rs = m.advertisers.filter((a) => a.type !== "airline"); setRetailers(rs); setSel(rs[0]?.id ?? ""); });
+    refresh();
+  }, [code]);
+  const propose = async () => { await api.createOffer(sel, code, desc); refresh(); };
+  return (
+    <Card title="Co-marketing marketplace" hint="Retailers offer deals to your passengers; accept with one click.">
+      <div className="row" style={{ marginBottom: 8 }}>
+        <select value={sel} onChange={(e) => setSel(e.target.value)} style={{ flex: 1 }}>{retailers.map((r) => <option key={r.id} value={r.id}>{r.name}</option>)}</select>
+      </div>
+      <div className="row" style={{ marginBottom: 8 }}>
+        <input value={desc} onChange={(e) => setDesc(e.target.value)} style={{ flex: 1 }} />
+        <button className="btn sm" onClick={propose}>Propose</button>
+      </div>
+      <div className="scroll" style={{ maxHeight: 220 }}>
+        {offers.length === 0 && <div className="muted">No offers yet.</div>}
+        {offers.map((o) => (
+          <div key={o.id} className="row between" style={{ padding: "6px 0", borderBottom: "1px solid var(--line)" }}>
+            <div><div>{o.retailerName}</div><div className="muted" style={{ fontSize: 12 }}>{o.description}</div></div>
+            {o.accepted ? <Badge tone="ok">accepted</Badge> : <button className="btn sm primary" onClick={() => api.acceptOffer(o.id).then(refresh)}>Accept</button>}
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+function OwnPerformance({ code }: { code: string }) {
+  const tick = useLiveTick();
+  const [p, setP] = useState<{ impressions: number; redemptions: number; campaigns: number } | null>(null);
+  useEffect(() => { api.airlinePerformance(code).then(setP); }, [code, tick]);
+  return (
+    <Card title="Performance (my passengers)" hint="Impressions and redemptions on campaigns at your gate zones.">
+      <div className="grid cols-2">
+        <Kpi label="Impressions" value={p ? fmt(p.impressions) : "—"} />
+        <Kpi label="Redemptions" value={p ? fmt(p.redemptions) : "—"} tone="ok" />
+      </div>
+      <div className="muted" style={{ fontSize: 12, marginTop: 10 }}>{p?.campaigns ?? 0} campaigns running at your gates.</div>
+    </Card>
   );
 }

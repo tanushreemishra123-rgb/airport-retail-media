@@ -62,7 +62,10 @@ paths:
   /admin/network: { get: { tags: [admin], summary: Zones + screens + presence for the map, responses: { "200": { description: ok } } } }
   /admin/incidents: { get: { tags: [admin], summary: Incident tracker, responses: { "200": { description: ok } } } }
   /admin/incidents/{id}: { post: { tags: [admin], summary: Update incident status/owner, parameters: [{ name: id, in: path, required: true, schema: { type: string } }], responses: { "200": { description: ok } } } }
-  /admin/master: { get: { tags: [admin], summary: Master data lists, responses: { "200": { description: ok } } } }
+  /admin/master:
+    get: { tags: [admin], summary: Master data lists, responses: { "200": { description: ok } } }
+    post: { tags: [admin], summary: Create/edit a screen or outlet, responses: { "200": { description: ok } } }
+  /admin/performance: { get: { tags: [admin], summary: API p50/p95/p99, playlist build time, 7-day uptime, responses: { "200": { description: ok } } } }
   /decisions: { get: { tags: [admin], summary: Decision log (filter by screenId/campaignId/engine), responses: { "200": { description: ok } } } }
   /decisions/{id}: { get: { tags: [admin], summary: One decision with full evidence trail, parameters: [{ name: id, in: path, required: true, schema: { type: string } }], responses: { "200": { description: ok } } } }
 
@@ -86,10 +89,24 @@ paths:
   /media/approvals/campaign/{id}: { post: { tags: [media], summary: Approve/reject campaign, parameters: [{ name: id, in: path, required: true, schema: { type: string } }], responses: { "200": { description: ok } } } }
   /media/advertisers: { get: { tags: [media], summary: Advertiser overview, responses: { "200": { description: ok } } } }
   /media/heatmap: { get: { tags: [media], summary: Segment x hour x zone heatmap, responses: { "200": { description: ok } } } }
+  /media/packages:
+    get: { tags: [media], summary: List inventory packages, responses: { "200": { description: ok } } }
+    post: { tags: [media], summary: Create a package (bundle zones/screens), responses: { "200": { description: ok } } }
+  /media/report/{id}: { get: { tags: [media], summary: Printable advertiser report (HTML → PDF), parameters: [{ name: id, in: path, required: true, schema: { type: string } }], responses: { "200": { description: text/html } } } }
+  /campaigns/{id}/stock: { post: { tags: [campaigns], summary: Stock-aware pause/resume, parameters: [{ name: id, in: path, required: true, schema: { type: string } }], responses: { "200": { description: ok } } } }
+  /campaigns/{id}/ab:
+    get: { tags: [campaigns], summary: A/B variant impressions, parameters: [{ name: id, in: path, required: true, schema: { type: string } }], responses: { "200": { description: ok } } }
+    post: { tags: [campaigns], summary: Set A/B variant + split, parameters: [{ name: id, in: path, required: true, schema: { type: string } }], responses: { "200": { description: ok } } }
 
   /airline/list: { get: { tags: [airline], summary: Airlines, responses: { "200": { description: ok } } } }
   /airline/{code}/flights: { get: { tags: [airline], summary: Flights today, parameters: [{ name: code, in: path, required: true, schema: { type: string } }], responses: { "200": { description: ok } } } }
   /airline/{code}/profile: { get: { tags: [airline], summary: Aggregated crowd profile, parameters: [{ name: code, in: path, required: true, schema: { type: string } }], responses: { "200": { description: ok } } } }
+  /airline/{code}/schedule: { post: { tags: [airline], summary: Schedule gate-area messaging, parameters: [{ name: code, in: path, required: true, schema: { type: string } }], responses: { "200": { description: ok } } } }
+  /airline/{code}/performance: { get: { tags: [airline], summary: Own-passenger performance, parameters: [{ name: code, in: path, required: true, schema: { type: string } }], responses: { "200": { description: ok } } } }
+  /offers:
+    get: { tags: [airline], summary: Co-marketing offers (optional ?airlineCode), responses: { "200": { description: ok } } }
+    post: { tags: [airline], summary: Propose a co-marketing offer, responses: { "200": { description: ok } } }
+  /offers/{id}/accept: { post: { tags: [airline], summary: Accept an offer, parameters: [{ name: id, in: path, required: true, schema: { type: string } }], responses: { "200": { description: ok } } } }
 
   /zones: { get: { tags: [passenger], summary: Zones, responses: { "200": { description: ok } } } }
   /screens: { get: { tags: [passenger], summary: Screens (optional ?zoneId), responses: { "200": { description: ok } } } }

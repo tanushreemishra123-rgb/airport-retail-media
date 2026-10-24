@@ -301,6 +301,11 @@ export interface Campaign {
   triggers: CampaignTrigger[];
   creativeIds: string[];
   priority: number; // airline priority etc.
+  /** Stock-aware offers: when false the campaign is paused (e.g. item out of stock). */
+  stockAvailable?: boolean;
+  /** A/B: optional second creative variant and its traffic split (0..1 to variant B). */
+  variantCreativeId?: string | null;
+  abSplit?: number;
   createdAt: IsoTime;
 }
 

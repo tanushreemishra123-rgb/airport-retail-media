@@ -16,6 +16,7 @@ services:
       CREATIVE_PROVIDER: mock-template
       # White-label + i18n.
       BRAND_NAME: SkyReach
+      BRAND_LOGO: ""
       SECOND_LANGUAGE: ar
       CURRENCY: USD
       # QR claim page LAN address (set to your laptop's LAN IP for phone scans).

@@ -1,0 +1,12 @@
+{
+  "id": "urn:ngsi-ld:AirportZone:MQI:T2-C",
+  "type": "AirportZone",
+  "@context": [
+    "https://smartdatamodels.org/context.jsonld",
+    "https://raw.githubusercontent.com/smart-data-models/dataModel.ACRIS/master/context.jsonld"
+  ],
+  "name": { "type": "Property", "value": "T2 Concourse C (Gates C1-C20)" },
+  "refTerminal": { "type": "Relationship", "object": "urn:ngsi-ld:Terminal:MQI:T2" },
+  "gates": { "type": "Property", "value": ["C1","C2","C3","C4","C5","C6","C7","C8","C9","C10"] },
+  "location": { "type": "GeoProperty", "value": { "type": "Point", "coordinates": [70, 28] } }
+}

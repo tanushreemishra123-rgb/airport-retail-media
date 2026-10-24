@@ -1,0 +1,17 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://smart-data-models.github.io/dataModel.ACRIS/QueueMeasurement/schema.json",
+  "title": "ACRIS - QueueingProcessMeasurement (subset)",
+  "type": "object",
+  "required": ["id", "type", "refZone", "dateObserved", "queueLength"],
+  "properties": {
+    "id": { "type": "string" },
+    "type": { "type": "string", "enum": ["QueueingProcessMeasurement"] },
+    "refProcess": { "type": "object" },
+    "refZone": { "type": "object" },
+    "dateObserved": { "type": "object" },
+    "queueLength": { "type": "object", "description": "number of passengers in the queue" },
+    "averageWaitingTime": { "type": "object", "description": "minutes" },
+    "throughput": { "type": "object", "description": "passengers per minute" }
+  }
+}

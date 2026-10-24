@@ -82,6 +82,7 @@ export function hardFilterReason(
   const f = c.hardFilters;
   if (c.status !== "running" && c.status !== "approved") return `status:${c.status}`;
   if (!c.brandSafe) return "brand_unsafe";
+  if (c.stockAvailable === false) return "out_of_stock";
 
   // placement
   const inZone = c.placement.zoneIds.length === 0 || c.placement.zoneIds.includes(screen.zoneId);

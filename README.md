@@ -180,7 +180,14 @@ deploy/render.yaml   one-click cloud blueprint
 | `npm run build` | build core → web → api |
 | `npm start` | run the built server |
 | `npm run seed` | seed the database |
-| `npm test` | run the decision-pipeline + core unit tests |
+| `npm run db:generate -w @arm/api` | generate a Drizzle SQL migration from the schema |
+| `npm run db:migrate -w @arm/api` | apply migrations to `DB_PATH` (managed-DB path) |
+| `npm test` | run the decision-pipeline, core + adapter unit tests |
+
+> **Storage & migrations:** the embedded demo creates its schema idempotently on
+> boot (zero setup) and seeds a full day. Versioned Drizzle migrations live in
+> `apps/api/drizzle/` for a managed database (SQLite/Postgres) — the same schema,
+> no code changes.
 
 ## Configuration
 

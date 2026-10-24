@@ -89,6 +89,8 @@ function CampaignBuilder({ outletAdvertiser }: { outletAdvertiser: string }) {
   const [intlOnly, setIntlOnly] = useState(false);
   const [minDwell, setMinDwell] = useState(0);
   const [budget, setBudget] = useState(5000);
+  const [delayTrigger, setDelayTrigger] = useState(false);
+  const [delayMin, setDelayMin] = useState(30);
   const [preview, setPreview] = useState<Preview | null>(null);
   const [created, setCreated] = useState<string | null>(null);
   useEffect(() => { api.zones().then((z) => setZones(z.filter((x) => x.gates.length || x.id.endsWith("DF") || x.id.endsWith("RET")))); }, []);
@@ -110,6 +112,7 @@ function CampaignBuilder({ outletAdvertiser }: { outletAdvertiser: string }) {
       segmentWeights: body.segmentWeights, hardFilters: body.hardFilters,
       placement: { zoneIds: selectedZones, screenIds: [], gates: [], scheduleStart: "2026-10-14T00:00:00Z", scheduleEnd: "2026-10-14T23:59:59Z", hoursOfDay: [] },
       budget: { totalCents: budget * 100, dailyCapCents: budget * 100, spentCents: 0, frequencyCapPerHour: 12 },
+      triggers: delayTrigger ? [{ kind: "delay_over", threshold: delayMin, boost: 1.5 }] : [],
     });
     setCreated(res.campaign.id);
   };
@@ -129,6 +132,10 @@ function CampaignBuilder({ outletAdvertiser }: { outletAdvertiser: string }) {
         <label className="row" style={{ gap: 4 }}><input type="checkbox" checked={intlOnly} onChange={(e) => setIntlOnly(e.target.checked)} /> International only</label>
         <label className="row" style={{ gap: 4 }}>Min dwell <input type="number" value={minDwell} onChange={(e) => setMinDwell(Number(e.target.value))} style={{ width: 64 }} /> min</label>
         <label className="row" style={{ gap: 4 }}>Budget $<input type="number" value={budget} onChange={(e) => setBudget(Number(e.target.value))} style={{ width: 80 }} /></label>
+      </div>
+      <div className="row" style={{ marginBottom: 6 }}>
+        <label className="row" style={{ gap: 4 }}><input type="checkbox" checked={delayTrigger} onChange={(e) => setDelayTrigger(e.target.checked)} /> Trigger rule: if flight delayed &gt;</label>
+        <input type="number" value={delayMin} onChange={(e) => setDelayMin(Number(e.target.value))} style={{ width: 56 }} disabled={!delayTrigger} /> <span className="muted">min, boost ×1.5</span>
       </div>
       <div className="row" style={{ marginBottom: 10, gap: 4 }}>
         {zones.map((z) => (
@@ -185,24 +192,46 @@ function Creatives({ advertiserId }: { advertiserId: string }) {
 }
 
 function History({ campaigns, cur }: { campaigns: Campaign[]; cur: string }) {
+  const [stock, setStock] = useState<Record<string, boolean>>({});
+  const [ab, setAb] = useState<Record<string, { a: number; b: number }>>({});
+  const toggleStock = async (c: Campaign) => {
+    const next = !(stock[c.id] ?? c.stockAvailable !== false);
+    await api.setStock(c.id, next);
+    setStock((s) => ({ ...s, [c.id]: next }));
+  };
+  const setupAb = async (c: Campaign) => {
+    const variant = c.creativeIds[1] ?? c.creativeIds[0];
+    if (!variant) return;
+    await api.setAb(c.id, variant, 0.5);
+    const r = await api.getAb(c.id);
+    setAb((m) => ({ ...m, [c.id]: { a: r.variantA.impressions, b: r.variantB?.impressions ?? 0 } }));
+  };
   return (
-    <Card title="Campaign history & ROI" hint="Past performance with a one-click re-run.">
+    <Card title="Campaign history, ROI, pacing & A/B" hint="Re-run, stock-pause, or A/B a campaign. Bars show budget pacing (spent / daily cap).">
       <div className="scroll" style={{ maxHeight: 340 }}>
         <table>
-          <thead><tr><th>Campaign</th><th>Impr</th><th>Redeem</th><th>Spend</th><th>ROI</th><th></th></tr></thead>
+          <thead><tr><th>Campaign</th><th>ROI</th><th>Pacing</th><th>Controls</th></tr></thead>
           <tbody>
             {campaigns.map((c) => {
               const hist = c.history ?? [];
-              const impr = hist.reduce((s, h) => s + h.impressions, 0) + (c.impressions ?? 0);
-              const red = hist.reduce((s, h) => s + h.redemptions, 0) + (c.redemptions ?? 0);
               const spend = hist.reduce((s, h) => s + h.spendCents, 0) + c.budget.spentCents;
               const rev = hist.reduce((s, h) => s + h.revenueCents, 0);
               const roi = spend ? Math.round((rev / spend) * 100) : 0;
+              const pace = c.budget.dailyCapCents ? Math.min(100, Math.round((c.budget.spentCents / c.budget.dailyCapCents) * 100)) : 0;
+              const inStock = stock[c.id] ?? c.stockAvailable !== false;
+              const abs = ab[c.id];
               return (
                 <tr key={c.id}>
-                  <td>{c.name}</td><td>{fmt(impr)}</td><td>{fmt(red)}</td><td>{money(spend, cur)}</td>
+                  <td>{c.name}{abs && <div className="muted" style={{ fontSize: 11 }}>A/B: A {fmt(abs.a)} · B {fmt(abs.b)}</div>}</td>
                   <td><Badge tone={roi >= 100 ? "ok" : "warn"}>{roi}%</Badge></td>
-                  <td><button className="btn sm" onClick={() => api.duplicateCampaign(c.id)}>Run again</button></td>
+                  <td style={{ minWidth: 90 }}><div className="track" style={{ height: 8 }}><div className="fill" style={{ width: `${pace}%`, background: pace > 85 ? "var(--warn)" : "var(--accent)" }} /></div><span className="muted mono" style={{ fontSize: 10 }}>{pace}%</span></td>
+                  <td>
+                    <div className="row" style={{ gap: 4 }}>
+                      <button className="btn sm" onClick={() => api.duplicateCampaign(c.id)}>Run again</button>
+                      <button className={`btn sm ${inStock ? "" : "danger"}`} onClick={() => toggleStock(c)}>{inStock ? "In stock" : "Out — paused"}</button>
+                      <button className="btn sm" onClick={() => setupAb(c)}>A/B</button>
+                    </div>
+                  </td>
                 </tr>
               );
             })}

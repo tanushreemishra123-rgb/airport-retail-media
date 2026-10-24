@@ -1,0 +1,11 @@
+{
+  "id": "urn:ngsi-ld:PassengerProcess:MQI:T2-C-SEC",
+  "type": "PassengerProcess",
+  "@context": [
+    "https://smartdatamodels.org/context.jsonld",
+    "https://raw.githubusercontent.com/smart-data-models/dataModel.ACRIS/master/context.jsonld"
+  ],
+  "processType": { "type": "Property", "value": "securityCheckpoint" },
+  "name": { "type": "Property", "value": "T2 Concourse C security" },
+  "refZone": { "type": "Relationship", "object": "urn:ngsi-ld:AirportZone:MQI:T2-C" }
+}

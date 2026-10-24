@@ -11,11 +11,13 @@ interface State {
   kpis: Kpis | null;
   presence: Record<string, number>;
   role: Role;
+  lang: string; // "en" or the configured second language
   lastEvent: LiveEvent | null;
   lastRedeem: { code: string; campaignId: string; at: string } | null;
   connected: boolean;
   tick: number; // increments on every delta so views can refetch
   setRole: (r: Role) => void;
+  setLang: (l: string) => void;
   init: () => Promise<void>;
 }
 
@@ -25,11 +27,13 @@ export const useStore = create<State>((set, get) => ({
   kpis: null,
   presence: {},
   role: "admin",
+  lang: "en",
   lastEvent: null,
   lastRedeem: null,
   connected: false,
   tick: 0,
   setRole: (r) => set({ role: r }),
+  setLang: (l) => set({ lang: l }),
   init: async () => {
     const config = await api.config();
     set({ config });

@@ -2,45 +2,56 @@ import React, { useEffect, useState } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
 import { api, type SimTargets } from "./api";
 import { useStore, type Role } from "./store";
+import { useT } from "./i18n";
 
-const ROLES: Array<{ id: Role; label: string; path: string }> = [
-  { id: "admin", label: "Platform Admin", path: "/admin" },
-  { id: "retailer", label: "Retailer", path: "/retailer" },
-  { id: "media", label: "Media Manager", path: "/media" },
-  { id: "airline", label: "Airline Rep", path: "/airline" },
-  { id: "passenger", label: "Passenger Screen", path: "/passenger" },
+const ROLES: Array<{ id: Role; path: string }> = [
+  { id: "admin", path: "/admin" },
+  { id: "retailer", path: "/retailer" },
+  { id: "media", path: "/media" },
+  { id: "airline", path: "/airline" },
+  { id: "passenger", path: "/passenger" },
 ];
 
 export function Shell({ children }: { children: React.ReactNode }) {
-  const { config, clock, connected, role, setRole } = useStore();
+  const { config, clock, connected, role, setRole, lang, setLang } = useStore();
+  const { t, rtl } = useT();
   const nav = useNavigate();
   const loc = useLocation();
   const theme = role === "admin" ? "dark" : "light";
-  useEffect(() => { document.documentElement.setAttribute("data-theme", theme); }, [theme]);
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    document.documentElement.setAttribute("dir", rtl ? "rtl" : "ltr");
+  }, [theme, rtl]);
   useEffect(() => {
     if (config?.brandColor) document.documentElement.style.setProperty("--accent", config.brandColor);
   }, [config]);
 
   const simTime = clock.now ? new Date(clock.now).toISOString().slice(0, 16).replace("T", " ") + "Z" : "—";
+  const second = config?.secondLanguage ?? "ar";
 
   return (
     <div className="app">
       <header className="header">
         <div className="header-row">
           <div className="brand">
-            <span className="logo">{(config?.brandName ?? "S")[0]}</span>
-            <div>{config?.brandName ?? "SkyReach"}<small>{config?.airport ?? "MQI"} · Meridian International · retail media</small></div>
+            {config?.brandLogo
+              ? <img className="logo" src={config.brandLogo} alt={config.brandName} style={{ objectFit: "cover" }} />
+              : <span className="logo">{(config?.brandName ?? "S")[0]}</span>}
+            <div>{config?.brandName ?? "SkyReach"}<small>{config?.airport ?? "MQI"} · {t("app.subtitle")}</small></div>
           </div>
           <div className="spacer" />
+          <button className="btn sm" title="Language" onClick={() => setLang(lang === "en" ? second : "en")}>
+            {lang === "en" ? (second === "ar" ? "ع" : second.toUpperCase()) : "EN"}
+          </button>
           <span className="clock" title="Simulation time">🕑 {simTime} · {clock.speed}×</span>
           <span className={`conn ${connected ? "on" : ""}`} title={connected ? "live" : "reconnecting"} />
         </div>
         <div className="roletabs">
           {ROLES.map((r) => (
             <button key={r.id} className={`roletab ${role === r.id ? "active" : ""}`}
-              onClick={() => { setRole(r.id); nav(r.path); }}>{r.label}</button>
+              onClick={() => { setRole(r.id); nav(r.path); }}>{t(`role.${r.id}`)}</button>
           ))}
-          <button className={`roletab ${loc.pathname.startsWith("/demo") ? "active" : ""}`} onClick={() => nav("/demo")}>Split-screen demo</button>
+          <button className={`roletab ${loc.pathname.startsWith("/demo") ? "active" : ""}`} onClick={() => nav("/demo")}>{t("role.demo")}</button>
         </div>
         <SimBar />
       </header>
@@ -51,6 +62,7 @@ export function Shell({ children }: { children: React.ReactNode }) {
 
 function SimBar() {
   const { clock } = useStore();
+  const { t } = useT();
   const [open, setOpen] = useState(false);
   const [targets, setTargets] = useState<SimTargets | null>(null);
   const [jump, setJump] = useState("");
@@ -62,8 +74,8 @@ function SimBar() {
     <div className="simbar">
       <div className="grp">
         {clock.running
-          ? <button className="btn" onClick={() => api.pause()}>⏸ Pause</button>
-          : <button className="btn primary" onClick={() => api.play()}>▶ Play</button>}
+          ? <button className="btn" onClick={() => api.pause()}>⏸ {t("sim.pause")}</button>
+          : <button className="btn primary" onClick={() => api.play()}>▶ {t("sim.play")}</button>}
       </div>
       <div className="grp">
         {[1, 10, 60].map((s) => (
@@ -72,10 +84,10 @@ function SimBar() {
       </div>
       <div className="grp">
         <input type="time" value={jump} onChange={(e) => setJump(e.target.value)} style={{ width: 110 }} />
-        <button className="btn sm" onClick={() => { if (jump) api.jump(`2026-10-14T${jump}:00Z`); }}>Jump</button>
+        <button className="btn sm" onClick={() => { if (jump) api.jump(`2026-10-14T${jump}:00Z`); }}>{t("sim.jump")}</button>
       </div>
       <div className="spacer" />
-      <button className={`btn ${open ? "active" : ""}`} onClick={() => setOpen((o) => !o)}>⚡ Inject event</button>
+      <button className={`btn ${open ? "active" : ""}`} onClick={() => setOpen((o) => !o)}>⚡ {t("sim.inject")}</button>
       {open && targets && <InjectPanel targets={targets} onDone={refreshTargets} />}
     </div>
   );

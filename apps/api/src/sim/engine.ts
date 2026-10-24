@@ -32,6 +32,7 @@ import {
 } from "@arm/core";
 import { MockAcrisSource } from "../adapters/acris.js";
 
+const DAY_ISO = "2026-10-14";
 const SLOT_MS = 15_000; // one ad slot = 15 simulation seconds
 const BOARDING_LEAD_MIN = 40;
 const GATE_CLOSE_MIN = 5;
@@ -56,6 +57,25 @@ interface FeedHealth {
   lastMessageMs: number;
   messagesPerMin: number;
   lagInjected: boolean;
+}
+
+export interface InventoryPackage {
+  id: string;
+  name: string;
+  zoneIds: string[];
+  screenCount: number;
+  predictedDailyImpressions: number;
+  priceCents: number;
+}
+
+export interface CoMarketingOffer {
+  id: string;
+  retailerAdvertiserId: string;
+  retailerName: string;
+  airlineCode: string;
+  description: string;
+  accepted: boolean;
+  createdAt: string;
 }
 
 export class SimEngine extends EventEmitter {
@@ -95,6 +115,11 @@ export class SimEngine extends EventEmitter {
   perCampaignImpr = new Map<string, number>();
   perCampaignRedemptions = new Map<string, number>();
   perOutletImpr = new Map<string, number>();
+  perCreativeImpr = new Map<string, number>();
+  packages = new Map<string, InventoryPackage>();
+  offers: CoMarketingOffer[] = [];
+  lastDecisionCycleMs = 0;
+  private startedAtMs = Date.now();
   private decisionIdSeq = 0;
 
   load(d: EngineData): void {
@@ -264,6 +289,7 @@ export class SimEngine extends EventEmitter {
   }
 
   runDecisions(nowMs: number, force = false): Decision[] {
+    const cycleStart = Date.now();
     const nowIso = new Date(nowMs).toISOString();
     const updated: Decision[] = [];
     const campaignList = [...this.campaigns.values()];
@@ -317,6 +343,7 @@ export class SimEngine extends EventEmitter {
         this.prevGroup.set(screen.id, null);
       }
     }
+    this.lastDecisionCycleMs = Date.now() - cycleStart;
     return updated;
   }
 
@@ -355,6 +382,10 @@ export class SimEngine extends EventEmitter {
       this.perCampaignImpr.set(c.id, (this.perCampaignImpr.get(c.id) ?? 0) + est);
       const outlet = this.outlets.find((o) => o.advertiserId === c.advertiserId);
       if (outlet) this.perOutletImpr.set(outlet.id, (this.perOutletImpr.get(outlet.id) ?? 0) + est);
+      // A/B: attribute the impression to variant A or B by the configured split.
+      const toB = c.variantCreativeId && Math.random() < (c.abSplit ?? 0);
+      const creativeId = toB ? c.variantCreativeId! : c.creativeIds[0];
+      if (creativeId) this.perCreativeImpr.set(creativeId, (this.perCreativeImpr.get(creativeId) ?? 0) + est);
     }
   }
 
@@ -458,6 +489,112 @@ export class SimEngine extends EventEmitter {
     this.perCampaignRedemptions.set(promo.campaignId, (this.perCampaignRedemptions.get(promo.campaignId) ?? 0) + 1);
     this.emit("redeem", { code, campaignId: promo.campaignId, at: nowIso });
     return { ok: true, campaignId: c?.id };
+  }
+
+  // ---- master data (create/edit) -----------------------------------------
+  upsertScreen(data: Partial<Screen> & { id?: string }): Screen {
+    const id = data.id && this.screens.has(data.id) ? data.id : `SCR-${String(this.screens.size + 1).padStart(4, "0")}`;
+    const existing = this.screens.get(id);
+    const screen: Screen = {
+      id,
+      name: data.name ?? existing?.name ?? id,
+      zoneId: data.zoneId ?? existing?.zoneId ?? this.zones[0]!.id,
+      nearestGates: data.nearestGates ?? existing?.nearestGates ?? [],
+      sizeInches: data.sizeInches ?? existing?.sizeInches ?? 55,
+      orientation: data.orientation ?? existing?.orientation ?? "landscape",
+      status: data.status ?? existing?.status ?? "online",
+      lastSeen: existing?.lastSeen ?? new Date().toISOString(),
+      latencyMs: data.latencyMs ?? existing?.latencyMs ?? 40,
+    };
+    this.screens.set(id, screen);
+    return screen;
+  }
+
+  upsertOutlet(data: Partial<Outlet> & { id?: string }): Outlet {
+    const id = data.id && this.outlets.find((o) => o.id === data.id) ? data.id : `OUT-${String(this.outlets.length + 1).padStart(3, "0")}`;
+    const idx = this.outlets.findIndex((o) => o.id === id);
+    const base = idx >= 0 ? this.outlets[idx]! : null;
+    const outlet: Outlet = {
+      id,
+      advertiserId: data.advertiserId ?? base?.advertiserId ?? "",
+      name: data.name ?? base?.name ?? id,
+      zoneId: data.zoneId ?? base?.zoneId ?? this.zones[0]!.id,
+      category: data.category ?? base?.category ?? "retail",
+    };
+    if (idx >= 0) this.outlets[idx] = outlet; else this.outlets.push(outlet);
+    return outlet;
+  }
+
+  setStock(campaignId: string, available: boolean): boolean {
+    const c = this.campaigns.get(campaignId);
+    if (!c) return false;
+    c.stockAvailable = available;
+    return true;
+  }
+
+  // ---- inventory packages (media) -----------------------------------------
+  createPackage(name: string, zoneIds: string[], priceCents: number): InventoryPackage {
+    const screensIn = [...this.screens.values()].filter((s) => zoneIds.includes(s.zoneId));
+    const predicted = Math.round(screensIn.length * 1800 * (zoneIds.some((z) => z.startsWith("T2")) ? 1.4 : 1));
+    const pkg: InventoryPackage = {
+      id: `PKG-${this.packages.size + 1}`, name, zoneIds,
+      screenCount: screensIn.length, predictedDailyImpressions: predicted, priceCents,
+    };
+    this.packages.set(pkg.id, pkg);
+    return pkg;
+  }
+
+  // ---- co-marketing offers (airline/retailer) -----------------------------
+  createOffer(retailerAdvertiserId: string, airlineCode: string, description: string): CoMarketingOffer {
+    const name = this.advertisers.find((a) => a.id === retailerAdvertiserId)?.name ?? retailerAdvertiserId;
+    const offer: CoMarketingOffer = {
+      id: `OFF-${this.offers.length + 1}`, retailerAdvertiserId, retailerName: name,
+      airlineCode, description, accepted: false, createdAt: new Date().toISOString(),
+    };
+    this.offers.push(offer);
+    return offer;
+  }
+  acceptOffer(id: string): boolean {
+    const o = this.offers.find((x) => x.id === id);
+    if (!o) return false;
+    o.accepted = true;
+    return true;
+  }
+
+  // ---- airline gate-area messaging ----------------------------------------
+  scheduleGateMessage(airlineCode: string, zoneIds: string[], headline: string, body: string): Campaign {
+    const adv = this.advertisers.find((a) => a.type === "airline" && a.airlineCode === airlineCode);
+    const advId = adv?.id ?? `ADV-AL-${airlineCode}`;
+    const id = `CMP-GATE-${this.campaigns.size + 1}`;
+    const creativeId = `CRE-GATE-${this.creatives.size + 1}`;
+    this.creatives.set(creativeId, {
+      id: creativeId, advertiserId: advId, name: `${airlineCode} gate message`, orientation: "landscape",
+      template: "promo-hero", copy: { en: { headline, body, cta: "At the gate" } },
+      bgColor: "#0a2342", fgColor: "#e6f0ff", approvalStatus: "approved", aiGenerated: false,
+    });
+    const now = new Date().toISOString();
+    const campaign: Campaign = {
+      id, advertiserId: advId, name: `${airlineCode} — ${headline}`.slice(0, 60), status: "running",
+      brandSafe: true, competitorGroup: null, segmentWeights: { cabin: { business: 0.5, premiumEconomy: 0.8 } },
+      hardFilters: {}, placement: { zoneIds, screenIds: [], gates: [], scheduleStart: `${DAY_ISO}T00:00:00Z`, scheduleEnd: `${DAY_ISO}T23:59:59Z`, hoursOfDay: [] },
+      budget: { totalCents: 2_000_00, dailyCapCents: 2_000_00, spentCents: 0, frequencyCapPerHour: 20 },
+      triggers: [{ kind: "boarding_starts", boost: 1.5 }], creativeIds: [creativeId], priority: 3, createdAt: now,
+    };
+    this.campaigns.set(id, campaign);
+    return campaign;
+  }
+
+  // ---- performance panel --------------------------------------------------
+  performance() {
+    const lat = [...this.screens.values()].map((s) => s.latencyMs).sort((a, b) => a - b);
+    const p = (q: number) => lat.length ? lat[Math.min(lat.length - 1, Math.floor(lat.length * q))]! : 0;
+    const uptime = Array.from({ length: 7 }, (_, i) => ({ day: i + 1, pct: Math.round((99.2 + Math.sin(i) * 0.4) * 10) / 10 }));
+    return {
+      apiP50Ms: p(0.5), apiP95Ms: p(0.95), apiP99Ms: p(0.99),
+      playlistBuildMs: this.lastDecisionCycleMs,
+      uptime7d: uptime,
+      processUptimeS: Math.round((Date.now() - this.startedAtMs) / 1000),
+    };
   }
 
   // ---- metrics ------------------------------------------------------------

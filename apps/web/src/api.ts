@@ -27,7 +27,8 @@ export const api = {
   incidents: () => get<Incident[]>("/admin/incidents"),
   resolveIncident: (id: string, status: string, owner?: string) => post(`/admin/incidents/${id}`, { status, owner }),
   master: () => get<Master>("/admin/master"),
-  createMaster: (entity: string, data: Record<string, unknown>) => post("/admin/master", { entity, data }),
+  createMaster: (entity: string, data: Record<string, unknown>) => post<{ ok: boolean; id?: string }>("/admin/master", { entity, data }),
+  performance: () => get<Performance>("/admin/performance"),
   decisions: (q: Record<string, string> = {}) => get<Decision[]>(`/decisions?${new URLSearchParams(q)}`),
 
   campaigns: () => get<Campaign[]>("/campaigns"),
@@ -35,6 +36,9 @@ export const api = {
   createCampaign: (body: Record<string, unknown>) => post<{ campaign: Campaign }>("/campaigns", body),
   duplicateCampaign: (id: string) => post<{ campaign: Campaign }>(`/campaigns/${id}/duplicate`),
   setCampaignStatus: (id: string, status: string) => post(`/campaigns/${id}/status`, { status }),
+  setStock: (id: string, available: boolean) => post(`/campaigns/${id}/stock`, { available }),
+  setAb: (id: string, variantCreativeId: string, abSplit: number) => post(`/campaigns/${id}/ab`, { variantCreativeId, abSplit }),
+  getAb: (id: string) => get<AbStats>(`/campaigns/${id}/ab`),
   previewCampaign: (body: Record<string, unknown>) => post<Preview>("/campaigns/preview", body),
   creatives: () => get<Creative[]>("/creatives"),
   generateCreative: (body: Record<string, unknown>) => post<{ creative: Creative }>("/creative/generate", body),
@@ -48,10 +52,18 @@ export const api = {
   approveCampaign: (id: string, decision: "approve" | "reject") => post(`/media/approvals/campaign/${id}`, { decision }),
   advertisers: () => get<AdvertiserRow[]>("/media/advertisers"),
   heatmap: () => get<Heatmap>("/media/heatmap"),
+  packages: () => get<InventoryPackage[]>("/media/packages"),
+  createPackage: (name: string, zoneIds: string[], priceCents: number) => post<{ package: InventoryPackage }>("/media/packages", { name, zoneIds, priceCents }),
+  reportUrl: (advertiserId: string) => `/api/media/report/${advertiserId}`,
 
   airlines: () => get<Airline[]>("/airline/list"),
   airlineFlights: (code: string) => get<AirlineFlight[]>(`/airline/${code}/flights`),
   airlineProfile: (code: string) => get<CrowdProfile>(`/airline/${code}/profile`),
+  airlinePerformance: (code: string) => get<{ impressions: number; redemptions: number; campaigns: number }>(`/airline/${code}/performance`),
+  scheduleGate: (code: string, zoneIds: string[], headline: string, body: string) => post<{ ok: boolean; campaignId: string }>(`/airline/${code}/schedule`, { zoneIds, headline, body }),
+  offers: (airlineCode?: string) => get<Offer[]>(`/offers${airlineCode ? `?airlineCode=${airlineCode}` : ""}`),
+  createOffer: (retailerAdvertiserId: string, airlineCode: string, description: string) => post<{ offer: Offer }>("/offers", { retailerAdvertiserId, airlineCode, description }),
+  acceptOffer: (id: string) => post<{ ok: boolean }>(`/offers/${id}/accept`),
 
   zones: () => get<Zone[]>("/zones"),
   screens: (zoneId?: string) => get<ScreenLite[]>(`/screens${zoneId ? `?zoneId=${zoneId}` : ""}`),
@@ -63,7 +75,7 @@ export const api = {
 };
 
 // ---- types (mirror the API shapes) ----
-export interface AppConfig { brandName: string; brandColor: string; secondLanguage: string; currency: string; publicBaseUrl: string; day: string; airport: string; }
+export interface AppConfig { brandName: string; brandColor: string; brandLogo: string; secondLanguage: string; currency: string; publicBaseUrl: string; day: string; airport: string; }
 export interface ClockState { now: string; speed: number; running: boolean; }
 export interface Kpis { screensOnlinePct: number; screensOnline: number; screensTotal: number; adPlaysToday: number; impressionsToday: number; revenueTodayCents: number; activeCampaigns: number; avgScreenLatencyMs: number; redemptionsToday: number; openIncidents: number; }
 export interface Feed { source: string; messagesPerMin: number; lastMessageMs: number; lagInjected: boolean; }
@@ -80,7 +92,7 @@ export interface CandidateScore { campaignId: string; audienceMatch: number; boo
 export interface Decision { id: string; screenId: string; zoneId: string; slotAt: string; winnerCampaignId: string | null; winningReason: string; engine: string; crowdProfile: CrowdProfile; candidates: CandidateScore[]; verification: { passed: boolean; fallbackUsed: boolean; checks: Array<{ kind: string; passed: boolean; detail: string }> }; evidence: Evidence[]; createdAt: string; }
 export interface Evidence { source: string; entityType: string; entityId: string; observedAt: string; freshnessMs: number; value: unknown; }
 export interface CrowdProfile { tripPurpose: Record<string, number>; partyType: Record<string, number>; ageBand: Record<string, number>; gender: { female: number; male: number }; cabin: Record<string, number>; frequentFlyerShare: number; domesticShare: number; internationalShare: number; topNationalities: Array<{ code: string; share: number }>; topLanguages: Array<{ code: string; share: number }>; topDestinations: Array<{ code: string; share: number }>; destinationRegions: Array<{ region: string; share: number }>; medianDwellMinutes: number; maxDelayMinutes: number; timeOfDay: string; festival: string | null; paxNow: number; paxNext30: number; }
-export interface Campaign { id: string; advertiserId: string; advertiserName?: string; name: string; status: string; brandSafe: boolean; competitorGroup: string | null; segmentWeights: SegmentWeights; hardFilters: Record<string, unknown>; placement: Placement; budget: Budget; triggers: Array<{ kind: string; threshold?: number; boost: number }>; creativeIds: string[]; priority: number; createdAt: string; impressions?: number; redemptions?: number; history?: HistoryDay[]; }
+export interface Campaign { id: string; advertiserId: string; advertiserName?: string; name: string; status: string; brandSafe: boolean; competitorGroup: string | null; segmentWeights: SegmentWeights; hardFilters: Record<string, unknown>; placement: Placement; budget: Budget; triggers: Array<{ kind: string; threshold?: number; boost: number }>; creativeIds: string[]; priority: number; stockAvailable?: boolean; variantCreativeId?: string | null; abSplit?: number; createdAt: string; impressions?: number; redemptions?: number; history?: HistoryDay[]; }
 export interface SegmentWeights { tripPurpose?: Record<string, number>; partyType?: Record<string, number>; ageBand?: Record<string, number>; cabin?: Record<string, number>; internationalPreference?: number; }
 export interface Placement { zoneIds: string[]; screenIds: string[]; gates: string[]; scheduleStart: string; scheduleEnd: string; hoursOfDay: number[]; }
 export interface Budget { totalCents: number; dailyCapCents: number; spentCents: number; frequencyCapPerHour: number; }
@@ -100,3 +112,7 @@ export interface Playing { screen: ScreenNode; decision: Decision | null; creati
 export interface ClaimInfo { ok: boolean; error?: string; code?: string; validUntil?: string; redeemed?: boolean; campaign?: { name: string; advertiserName: string } | null; creative?: { copy: Record<string, { headline: string; body: string; cta: string }>; bgColor: string; fgColor: string } | null; }
 export interface Slot { zoneId: string; hour: number; score: number; predictedImpressions: number; }
 export interface SimTargets { flights: Array<{ id: string; flightNumber: string; destination: string; gate: string | null; zoneId: string | null; status: string; international: boolean }>; screens: Array<{ id: string; name: string; status: string }>; zones: Zone[]; feeds: string[]; }
+export interface Performance { apiP50Ms: number; apiP95Ms: number; apiP99Ms: number; playlistBuildMs: number; uptime7d: Array<{ day: number; pct: number }>; processUptimeS: number; }
+export interface InventoryPackage { id: string; name: string; zoneIds: string[]; screenCount: number; predictedDailyImpressions: number; priceCents: number; }
+export interface Offer { id: string; retailerAdvertiserId: string; retailerName: string; airlineCode: string; description: string; accepted: boolean; createdAt: string; }
+export interface AbStats { split: number; variantA: { creativeId: string; impressions: number }; variantB: { creativeId: string; impressions: number } | null; }

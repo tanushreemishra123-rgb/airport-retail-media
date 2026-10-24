@@ -27,6 +27,7 @@ const SIM_SPEED = Number(process.env.SIM_SPEED ?? 10);
 export const CONFIG: AppConfig = {
   brandName: process.env.BRAND_NAME ?? "SkyReach",
   brandColor: process.env.BRAND_COLOR ?? "#4f8cff",
+  brandLogo: process.env.BRAND_LOGO ?? "",
   secondLanguage: process.env.SECOND_LANGUAGE ?? "ar",
   currency: process.env.CURRENCY ?? "USD",
   publicBaseUrl: process.env.PUBLIC_BASE_URL ?? "",
