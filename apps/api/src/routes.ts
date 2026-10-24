@@ -33,6 +33,12 @@ interface Deps {
   broadcast: (msg: unknown) => void;
 }
 
+/** HTML-escape for server-rendered pages (advertiser report). */
+function esc(s: unknown): string {
+  return String(s).replace(/[&<>"']/g, (c) =>
+    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c] ?? c);
+}
+
 export function registerRoutes(app: FastifyInstance, deps: Deps): void {
   const { engine, clock, db, config, broadcast } = deps;
   const creativeProvider = makeCreativeProvider({ SECOND_LANGUAGE: config.secondLanguage });
@@ -327,11 +333,11 @@ export function registerRoutes(app: FastifyInstance, deps: Deps): void {
     const impr = cs.reduce((s, c) => s + (engine.perCampaignImpr.get(c.id) ?? 0), 0);
     const red = cs.reduce((s, c) => s + (engine.perCampaignRedemptions.get(c.id) ?? 0), 0);
     const spend = cs.reduce((s, c) => s + c.budget.spentCents, 0);
-    const fmtc = (c: number) => `${config.currency} ${(c / 100).toLocaleString()}`;
-    const rows = cs.map((c) => `<tr><td>${c.name}</td><td>${c.status}</td><td style="text-align:right">${(engine.perCampaignImpr.get(c.id) ?? 0).toLocaleString()}</td><td style="text-align:right">${engine.perCampaignRedemptions.get(c.id) ?? 0}</td><td style="text-align:right">${fmtc(c.budget.spentCents)}</td></tr>`).join("");
-    reply.header("Content-Type", "text/html").send(`<!doctype html><html><head><meta charset="utf-8"><title>${adv.name} — advertiser report</title>
+    const fmtc = (c: number) => `${esc(config.currency)} ${(c / 100).toLocaleString()}`;
+    const rows = cs.map((c) => `<tr><td>${esc(c.name)}</td><td>${esc(c.status)}</td><td style="text-align:right">${(engine.perCampaignImpr.get(c.id) ?? 0).toLocaleString()}</td><td style="text-align:right">${engine.perCampaignRedemptions.get(c.id) ?? 0}</td><td style="text-align:right">${fmtc(c.budget.spentCents)}</td></tr>`).join("");
+    reply.header("Content-Type", "text/html").send(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(adv.name)} — advertiser report</title>
 <style>body{font-family:system-ui,Arial;margin:40px;color:#16203a}h1{margin:0}table{width:100%;border-collapse:collapse;margin-top:16px}th,td{padding:8px;border-bottom:1px solid #e3e8f2;font-size:13px;text-align:left}.kpis{display:flex;gap:24px;margin:20px 0}.k .v{font-size:26px;font-weight:800}.k .l{color:#697792;font-size:12px}button{margin-top:20px;padding:8px 14px}@media print{button{display:none}}</style></head>
-<body><h1>${config.brandName} — Advertiser report</h1><div style="color:#697792">${adv.name} · ${config.airport} · generated ${nowIso()}</div>
+<body><h1>${esc(config.brandName)} — Advertiser report</h1><div style="color:#697792">${esc(adv.name)} · ${esc(config.airport)} · generated ${esc(nowIso())}</div>
 <div class="kpis"><div class="k"><div class="v">${impr.toLocaleString()}</div><div class="l">Impressions</div></div><div class="k"><div class="v">${red}</div><div class="l">Redemptions</div></div><div class="k"><div class="v">${fmtc(spend)}</div><div class="l">Spend</div></div><div class="k"><div class="v">${cs.length}</div><div class="l">Campaigns</div></div></div>
 <table><thead><tr><th>Campaign</th><th>Status</th><th style="text-align:right">Impr</th><th style="text-align:right">Redeem</th><th style="text-align:right">Spend</th></tr></thead><tbody>${rows}</tbody></table>
 <button onclick="window.print()">Print / Save as PDF</button></body></html>`);

@@ -41,7 +41,7 @@ jobs:
           path: trivy-report.json
 
   sast:
-    name: Semgrep + npm audit
+    name: Semgrep / OpenGrep + npm audit
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -54,10 +54,20 @@ jobs:
           python3 -m pip install --quiet semgrep
           semgrep scan --config p/javascript --config p/typescript --config p/nodejs \
             --config security/semgrep-rules.yml --error --json --output semgrep-report.json .
+      # OpenGrep with the same config the screening scorecard uses.
+      - name: OpenGrep (r/all)
+        continue-on-error: true
+        run: |
+          curl -fsSL https://raw.githubusercontent.com/opengrep/opengrep/main/install.sh | bash
+          export PATH="$HOME/.opengrep/cli/latest:$PATH"
+          opengrep --version
+          opengrep --config=r/all --exclude-rule=bbp-pattern-inject --json --verbose . > opengrep-results.json || true
       - name: npm audit (production)
         run: npm audit --omit=dev --audit-level=high
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: sast-reports
-          path: semgrep-report.json
+          path: |
+            semgrep-report.json
+            opengrep-results.json
