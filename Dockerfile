@@ -22,7 +22,7 @@ COPY . .
 RUN npm run build
 
 # Prune to production dependencies for the runtime image.
-RUN npm prune --omit=dev
+
 
 # ---------------------------------------------------------------------------
 FROM node:22-bookworm-slim AS runtime
