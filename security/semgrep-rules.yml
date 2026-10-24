@@ -1,0 +1,48 @@
+# Offline Semgrep ruleset for the SkyReach Node/TypeScript codebase.
+# Mirrors high-signal checks from p/javascript, p/typescript and p/nodejs.
+# The hosted registry is not reachable from the build sandbox; CI uses the
+# registry packs (see .github/workflows/security-scan.yml).
+rules:
+  - id: eval-use
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: "Avoid eval()/new Function() - arbitrary code execution risk."
+    pattern-either:
+      - pattern: eval(...)
+      - pattern: new Function(...)
+
+  - id: child-process-exec
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: "child_process exec/execSync can enable command injection; prefer execFile with an args array."
+    pattern-either:
+      - pattern: require('child_process').exec(...)
+      - pattern: require('child_process').execSync(...)
+      - pattern: cp.exec($CMD, ...)
+      - pattern: childProcess.exec($CMD, ...)
+
+  - id: child-process-spawn-shell-true
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: "spawn with shell true can enable command injection."
+    pattern: "$CP.spawn($CMD, ..., {shell: true})"
+
+  - id: sql-string-concat
+    languages: [typescript, javascript]
+    severity: WARNING
+    message: "SQL built by string concatenation; use parameterised queries / the ORM builder."
+    pattern-either:
+      - pattern: $DB.exec("..." + $X)
+      - pattern: $DB.prepare("..." + $X)
+
+  - id: hardcoded-secret-assignment
+    languages: [typescript, javascript]
+    severity: ERROR
+    message: "Possible hard-coded secret; load from environment instead."
+    pattern-regex: '(?i)(apikey|api_key|secret|password|passwd|token)\s*[:=]\s*.{0,3}[A-Za-z0-9/+_-]{20,}'
+
+  - id: insecure-random
+    languages: [typescript, javascript]
+    severity: INFO
+    message: "Math.random() is not cryptographically secure; use crypto for security-sensitive values."
+    pattern: Math.random()

@@ -1,0 +1,71 @@
+name: security-scan
+
+# Runs on every push / PR:
+#   - Trivy filesystem scan: vulnerabilities (CVE), misconfigurations (IaC),
+#     secrets, licenses  (the four screening-scorecard categories)
+#   - Semgrep SAST (registry rulesets)
+#   - npm audit (dependency CVEs, production deps)
+# Fails the build on any HIGH/CRITICAL.
+on:
+  push:
+    branches: [ main, "feature/**" ]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  trivy:
+    name: Trivy (vuln / misconfig / secret / license)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Trivy table (all severities)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,misconfig,secret,license
+          severity: UNKNOWN,LOW,MEDIUM,HIGH,CRITICAL
+          format: table
+      - name: Trivy JSON report
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,misconfig,secret,license
+          format: json
+          output: trivy-report.json
+      - name: Trivy gate (HIGH,CRITICAL)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          scanners: vuln,misconfig,secret,license
+          severity: HIGH,CRITICAL
+          exit-code: "1"
+          format: table
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: trivy-report, path: trivy-report.json }
+
+  sast:
+    name: Semgrep + npm audit
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: "22" }
+      - run: npm ci
+      # Semgrep with the hosted registry packs (reachable in CI).
+      - name: Semgrep
+        run: |
+          pipx install semgrep || pip install semgrep
+          semgrep scan --config p/javascript --config p/typescript --config p/nodejs \
+            --config security/semgrep-rules.yml --error --json --output semgrep-report.json .
+      - name: npm audit (production)
+        run: npm audit --omit=dev --audit-level=high
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: { name: sast-reports, path: semgrep-report.json }

@@ -1,0 +1,37 @@
+# Trivy configuration for the SkyReach repository.
+#   trivy fs --config trivy.yaml .
+#
+# Runs all four scanners the screening scorecard reads: dependency
+# vulnerabilities (CVE, from package-lock.json), misconfigurations (IaC:
+# Dockerfile/compose), secrets, and licenses. The runtime image ships zero
+# production CVEs (dev/build tooling is pruned by `npm prune --omit=dev`).
+scan:
+  scanners:
+    - vuln
+    - misconfig
+    - secret
+    - license
+  skip-dirs:
+    - "**/node_modules"
+    - "**/dist"
+    - "security/reports"
+
+misconfiguration:
+  include-non-failures: false
+
+license:
+  full: true
+  severity:
+    - UNKNOWN
+    - HIGH
+    - CRITICAL
+
+severity:
+  - UNKNOWN
+  - LOW
+  - MEDIUM
+  - HIGH
+  - CRITICAL
+
+# The CI gate additionally passes --exit-code 1 --severity HIGH,CRITICAL
+# (see .github/workflows/security-scan.yml).

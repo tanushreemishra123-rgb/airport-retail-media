@@ -383,6 +383,7 @@ export class SimEngine extends EventEmitter {
       const outlet = this.outlets.find((o) => o.advertiserId === c.advertiserId);
       if (outlet) this.perOutletImpr.set(outlet.id, (this.perOutletImpr.get(outlet.id) ?? 0) + est);
       // A/B: attribute the impression to variant A or B by the configured split.
+      // nosemgrep: insecure-random -- non-security 50/50 creative split, not a token
       const toB = c.variantCreativeId && Math.random() < (c.abSplit ?? 0);
       const creativeId = toB ? c.variantCreativeId! : c.creativeIds[0];
       if (creativeId) this.perCreativeImpr.set(creativeId, (this.perCreativeImpr.get(creativeId) ?? 0) + est);

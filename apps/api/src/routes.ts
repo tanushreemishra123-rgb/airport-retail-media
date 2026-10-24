@@ -3,6 +3,7 @@
  * recommendations. Handlers read live engine state; all aggregations are
  * derived from measured data (flights, presence, decisions, impressions).
  */
+import { randomInt } from "node:crypto";
 import type { FastifyInstance } from "fastify";
 import QRCode from "qrcode";
 import { rollupProfile, type Campaign, type Creative, type ProfileContribution, type Redemption } from "@arm/core";
@@ -443,7 +444,7 @@ export function registerRoutes(app: FastifyInstance, deps: Deps): void {
   app.post<{ Params: { code: string } }>("/api/claim/:code/share", async (req) => {
     const promo = [...engine.promoCodes.values()].find((p) => p.code === req.params.code);
     if (!promo) return { ok: false };
-    const code = `${promo.code}-F${Math.floor(Math.random() * 900 + 100)}`;
+    const code = `${promo.code}-F${randomInt(100, 1000)}`;
     const child = { ...promo, id: `PRM-SH-${Date.now()}`, code, parentCode: promo.code, redeemed: false };
     engine.promoCodes.set(child.id, child);
     return { ok: true, code };
